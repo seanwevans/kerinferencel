@@ -4,8 +4,8 @@ import binascii
 import os
 import subprocess
 import sys
-import threading
 import time
+import json
 
 import numpy as np
 from PIL import Image
@@ -46,9 +46,18 @@ def update_map(map_path, key, data_bytes):
 
 
 def lookup_map(map_path, key):
-    # Lookup a BPF map entry using bpftool.
+    """Lookup a BPF map entry using bpftool in JSON mode."""
     key_hex = key.to_bytes(4, byteorder="little").hex()
-    cmd = ["bpftool", "map", "lookup", "pinned", map_path, "key", key_hex]
+    cmd = [
+        "bpftool",
+        "-j",
+        "map",
+        "lookup",
+        "pinned",
+        map_path,
+        "key",
+        key_hex,
+    ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
     return result.stdout
 
@@ -61,11 +70,18 @@ def trigger_inference():
 
 
 def parse_output(data):
-    # The output map is an array of 10 int32 values.
-    # Each int32 is 4 bytes; expect 40 bytes.
-    if len(data) < 40:
+    """Decode JSON output from bpftool into an array of int32 values."""
+    obj = json.loads(data.decode("utf-8"))
+    if isinstance(obj, list):
+        if not obj:
+            raise ValueError("No data returned from bpftool")
+        obj = obj[0]
+    if "value" not in obj:
+        raise ValueError("Unexpected bpftool output")
+    value_bytes = bytes(obj["value"])
+    if len(value_bytes) < 40:
         raise ValueError("Unexpected output map size")
-    arr = np.frombuffer(data, dtype=np.int32)
+    arr = np.frombuffer(value_bytes, dtype=np.int32)
     return arr
 
 
