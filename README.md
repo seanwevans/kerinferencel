@@ -43,6 +43,10 @@ pip3 install torch torchvision numpy pillow
 
 # Build the project
 make
+
+# If your kernel headers are in a non-standard location, override KDIR
+# which defaults to /lib/modules/$(uname -r)/build
+# make KDIR=/path/to/custom/headers
 ```
 
 ## Usage
@@ -123,7 +127,8 @@ The script will:
 
 - Fixed input size (28x28 grayscale images)
 - Simple architecture (single hidden layer)
-- May require kernel headers specific to your system (adjust paths in Makefile)
+- May require kernel headers specific to your system. Set the `KDIR` variable if
+  the headers are not in `/lib/modules/$(uname -r)/build`.
 
 ## License
 
