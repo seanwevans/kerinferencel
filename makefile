@@ -3,8 +3,11 @@ BPF_LLVM_STRIP ?= llvm-strip
 LDFLAGS = -lbpf
 CC ?= gcc
 CFLAGS ?= -O2 -g -Wall
-KERN_HEADERS = -I/usr/src/linux-headers-6.8.0-55-generic/arch/x86/include/generated/uapi \
-               -I/usr/src/linux-headers-6.8.0-55/arch/x86/include/uapi
+
+# Location of the kernel headers. Override if your headers live elsewhere.
+KDIR ?= /lib/modules/$(shell uname -r)/build
+KERN_HEADERS = -I$(KDIR)/arch/x86/include/generated/uapi \
+               -I$(KDIR)/arch/x86/include/uapi
 
 BPF_SRC = kerinferencel.bpf.c
 BPF_OBJ = kerinferencel.bpf.o
