@@ -277,11 +277,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  prog = bpf_object__find_program_by_name(obj, "kprobe/do_mnist_inference");
+  prog = bpf_object__find_program_by_name(obj, "bpf_mnist_infer");
   if (!prog) {
-    fprintf(stderr, "Couldn't find BPF program.\n");
+    fprintf(stderr, "Couldn't find BPF program 'bpf_mnist_infer'.\n");
     goto cleanup;
   }
+  printf("Found program %s\n", bpf_program__name(prog));
 
   bpf_program__set_type(prog, BPF_PROG_TYPE_TRACEPOINT);
   if (bpf_program__get_type(prog) != BPF_PROG_TYPE_TRACEPOINT) {
