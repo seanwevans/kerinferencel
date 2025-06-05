@@ -11,13 +11,8 @@
 
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
-#include <linux/hw_breakpoint.h>
-#include <linux/perf_event.h>
-#include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
 
 extern const unsigned char _binary_kerinferencel_bpf_o_start[];
 extern const unsigned char _binary_kerinferencel_bpf_o_end[];
@@ -172,48 +167,6 @@ cleanup:
   return err;
 }
 
-static int create_tracepoint_event(const char *tp_category,
-                                   const char *tp_name) {
-  char path[256];
-  int fd;
-  int id = 0;
-
-  snprintf(path, sizeof(path), "/sys/kernel/debug/tracing/events/%s/%s/id",
-           tp_category, tp_name);
-
-  fd = open(path, O_RDONLY);
-  if (fd < 0) {
-    fprintf(stderr, "Failed to open tracepoint id file: %s\n", strerror(errno));
-    return -1;
-  }
-
-  char buf[16] = {0};
-  if (read(fd, buf, sizeof(buf) - 1) <= 0) {
-    fprintf(stderr, "Failed to read tracepoint id: %s\n", strerror(errno));
-    close(fd);
-    return -1;
-  }
-  id = atoi(buf);
-  close(fd);
-
-  struct perf_event_attr attr = {
-      .type = PERF_TYPE_TRACEPOINT,
-      .size = sizeof(attr),
-      .config = id,
-      .sample_period = 1,
-      .sample_type = PERF_SAMPLE_RAW,
-      .wakeup_events = 1,
-  };
-
-  fd = syscall(__NR_perf_event_open, &attr, -1, 0, -1, 0);
-  if (fd < 0) {
-    fprintf(stderr, "Failed to create perf event: %s\n", strerror(errno));
-    return -1;
-  }
-
-  return fd;
-}
-
 static void predict_digit(int *output, int output_size) {
   int max_idx = 0;
   int max_val = output[0];
@@ -236,7 +189,6 @@ int main(int argc, char **argv) {
   int map_fd_input = -1, map_fd_output = -1;
   int map_fd_hidW = -1, map_fd_hidB = -1;
   int map_fd_outW = -1, map_fd_outB = -1;
-  int perf_fd = -1;
 
   err = set_memlock_limit();
   if (err) {
@@ -316,11 +268,6 @@ int main(int argc, char **argv) {
     goto cleanup;
   }
 
-  perf_fd = create_tracepoint_event(TP_NAME, TP_EVENT);
-  if (perf_fd < 0) {
-    goto cleanup;
-  }
-
   // Attach program to tracepoint
   link = bpf_program__attach_tracepoint(prog, TP_NAME, TP_EVENT);
   err = libbpf_get_error(link);
@@ -354,8 +301,6 @@ int main(int argc, char **argv) {
   predict_digit(output, OUTPUT_SIZE);
 
 cleanup:
-  if (perf_fd >= 0)
-    close(perf_fd);
   if (link)
     bpf_link__destroy(link);
   if (obj)
