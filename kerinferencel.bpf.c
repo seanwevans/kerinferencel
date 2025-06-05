@@ -19,52 +19,77 @@
 // Maximum verifier complexity - helps with large BPF programs
 #define MAX_LAYERS 2
 
-// 1) Input: 784 bytes (uint8)
+// Structs to hold entire arrays as single map values
+struct input_val {
+  __u8 input[INPUT_SIZE];
+};
+
+struct hidden_weights_val {
+  __s8 weights[INPUT_SIZE * HIDDEN_SIZE];
+};
+
+struct hidden_bias_val {
+  int bias[HIDDEN_SIZE];
+};
+
+struct output_weights_val {
+  __s8 weights[HIDDEN_SIZE * OUTPUT_SIZE];
+};
+
+struct output_bias_val {
+  int bias[OUTPUT_SIZE];
+};
+
+struct output_val {
+  int output[OUTPUT_SIZE];
+};
+
+// 1) Input: 784 bytes (uint8) stored as single value
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, INPUT_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, __u8);
+  __type(value, struct input_val);
 } mnist_input SEC(".maps");
 
 // 2) Hidden layer weights: 784*32 int8 values
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, HIDDEN_SIZE *INPUT_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, __s8);
+  __type(value, struct hidden_weights_val);
 } hidden_weights SEC(".maps");
 
 // 3) Hidden layer bias: 32 int32 values
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, HIDDEN_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, int);
+  __type(value, struct hidden_bias_val);
 } hidden_bias SEC(".maps");
 
 // 4) Output layer weights: 32*10 int8 values
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, OUTPUT_SIZE *HIDDEN_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, __s8);
+  __type(value, struct output_weights_val);
 } output_weights SEC(".maps");
 
 // 5) Output layer bias: 10 int32 values
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, OUTPUT_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, int);
+  __type(value, struct output_bias_val);
 } output_bias SEC(".maps");
 
 // 6) Output array: 10 int32 values
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, OUTPUT_SIZE);
+  __uint(max_entries, 1);
   __type(key, __u32);
-  __type(value, int);
+  __type(value, struct output_val);
 } mnist_output SEC(".maps");
 
 // Leaky ReLU activation function
@@ -81,16 +106,25 @@ SEC("tracepoint/raw_syscalls/sys_enter")
 int bpf_mnist_infer(struct trace_event_raw_sys_enter *ctx) {
   __u32 zero = 0;
 
-  // Lookup map pointers
-  __u8 *in_ptr = bpf_map_lookup_elem(&mnist_input, &zero);
-  __s8 *hidW_ptr = bpf_map_lookup_elem(&hidden_weights, &zero);
-  int *hidB_ptr = bpf_map_lookup_elem(&hidden_bias, &zero);
-  __s8 *outW_ptr = bpf_map_lookup_elem(&output_weights, &zero);
-  int *outB_ptr = bpf_map_lookup_elem(&output_bias, &zero);
-  int *out_ptr = bpf_map_lookup_elem(&mnist_output, &zero);
+  // Lookup map pointers to the value structs
+  struct input_val *in_val = bpf_map_lookup_elem(&mnist_input, &zero);
+  struct hidden_weights_val *hidW_val =
+      bpf_map_lookup_elem(&hidden_weights, &zero);
+  struct hidden_bias_val *hidB_val = bpf_map_lookup_elem(&hidden_bias, &zero);
+  struct output_weights_val *outW_val =
+      bpf_map_lookup_elem(&output_weights, &zero);
+  struct output_bias_val *outB_val = bpf_map_lookup_elem(&output_bias, &zero);
+  struct output_val *out_val = bpf_map_lookup_elem(&mnist_output, &zero);
 
-  if (!in_ptr || !hidW_ptr || !hidB_ptr || !outW_ptr || !outB_ptr || !out_ptr)
+  if (!in_val || !hidW_val || !hidB_val || !outW_val || !outB_val || !out_val)
     return 0;
+
+  __u8 *in_ptr = in_val->input;
+  __s8 *hidW_ptr = hidW_val->weights;
+  int *hidB_ptr = hidB_val->bias;
+  __s8 *outW_ptr = outW_val->weights;
+  int *outB_ptr = outB_val->bias;
+  int *out_ptr = out_val->output;
 
   // Temporary stack array for hidden activations (int32)
   int hidden_layer[HIDDEN_SIZE];
