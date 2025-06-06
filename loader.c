@@ -67,8 +67,9 @@ static int read_binary_file(const char *filename, void *buffer, size_t size) {
   return 0;
 }
 
-static int update_map_with_data(int map_fd, uint32_t key, void *data,
-                                size_t size, const char *map_name) {
+static int update_map_with_data(int map_fd, void *data, size_t size,
+                                const char *map_name) {
+  __u32 key = 0;
   int err = bpf_map_update_elem(map_fd, &key, data, 0);
   if (err) {
     fprintf(stderr, "Failed to update %s map: %s\n", map_name, strerror(errno));
@@ -82,7 +83,6 @@ static int load_model_parameters(int map_fd_input, int map_fd_hidW,
                                  int map_fd_hidB, int map_fd_outW,
                                  int map_fd_outB) {
   int err = 0;
-  uint32_t key = 0;
 
   int8_t *hidden_weights = malloc(INPUT_SIZE * HIDDEN_SIZE);
   int32_t *hidden_bias = malloc(HIDDEN_SIZE * sizeof(int32_t));
@@ -148,16 +148,16 @@ static int load_model_parameters(int map_fd_input, int map_fd_hidW,
     printf("Run train.py first to generate parameter files.\n");
   }
 
-  // Update maps
-  if (update_map_with_data(map_fd_hidW, key, hidden_weights,
+  // Update maps with entire parameter arrays
+  if (update_map_with_data(map_fd_hidW, hidden_weights,
                            INPUT_SIZE * HIDDEN_SIZE, "hidden_weights") < 0 ||
-      update_map_with_data(map_fd_hidB, key, hidden_bias,
+      update_map_with_data(map_fd_hidB, hidden_bias,
                            HIDDEN_SIZE * sizeof(int32_t), "hidden_bias") < 0 ||
-      update_map_with_data(map_fd_outW, key, output_weights,
+      update_map_with_data(map_fd_outW, output_weights,
                            HIDDEN_SIZE * OUTPUT_SIZE, "output_weights") < 0 ||
-      update_map_with_data(map_fd_outB, key, output_bias,
+      update_map_with_data(map_fd_outB, output_bias,
                            OUTPUT_SIZE * sizeof(int32_t), "output_bias") < 0 ||
-      update_map_with_data(map_fd_input, key, input_image, INPUT_SIZE,
+      update_map_with_data(map_fd_input, input_image, INPUT_SIZE,
                            "mnist_input") < 0) {
     err = -1;
     goto cleanup;
